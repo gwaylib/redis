@@ -2,7 +2,7 @@
 
 Depends on redis 5.0.3
 
-## Example for used:
+## Examples
 
 ### Store long-term data
 ```
