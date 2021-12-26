@@ -5,7 +5,7 @@ Depends on redis 5.0.3
 ## Examples
 
 ### Store long-term data
-```
+```golang
 	r, err := NewRediStore(10, "tcp", "127.0.0.1:6379", "")
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +29,7 @@ Depends on redis 5.0.3
 ```
 
 ### Store timed data
-```
+```golang
 	r, err := NewRediStore(10, "tcp", "127.0.0.1:6379", "")
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ Depends on redis 5.0.3
 ```
 
 ### Distributed lock
-```
+```golang
 	r, err := NewRediStore(10, "tcp", "127.0.0.1:6379", "")
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +65,7 @@ Depends on redis 5.0.3
 ```
 
 ### Message queue
-```
+```golang
 import (
 	"fmt"
 	"log"
