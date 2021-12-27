@@ -15,9 +15,21 @@ func TestRedisLock(t *testing.T) {
 
 	key := fmt.Sprintf("%d", time.Now().UnixNano())
 	owner := "testing"
-	if err := r.Lock(key, owner, 60); err != nil {
+	if err := r.Lock(key, owner, time.Second); err != nil {
 		t.Fatal(err)
 	}
-	defer r.Unlock(key, owner)
+	if err := r.Unlock(key, owner); err != nil {
+		t.Fatal(err)
+	}
 
+	// try a new lock, expect ok
+	if err := r.Lock(key, owner+"1", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	// try a expired lock, will block the process
+	// expect ok when lock expired
+	if err := r.Lock(key, owner+"2", time.Second); err != nil {
+		t.Fatal(err)
+	}
+	defer r.Unlock(key, owner+"2")
 }

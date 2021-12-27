@@ -2,6 +2,7 @@ package redis
 
 import (
 	"testing"
+	"time"
 )
 
 func TestRedisStore(t *testing.T) {
@@ -12,7 +13,7 @@ func TestRedisStore(t *testing.T) {
 	defer r.Close()
 
 	id := 1
-	if err := r.Set("testing", id, 60); err != nil {
+	if err := r.Set("testing", id, 60*time.Second); err != nil {
 		t.Fatal(err)
 	}
 	outId := 0

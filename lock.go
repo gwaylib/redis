@@ -7,9 +7,9 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
-func (s *RediStore) Lock(key, owner string, age int64) error {
-	if age < 1 {
-		return errors.New("age can not less than 1 second")
+func (s *RediStore) Lock(key, owner string, age time.Duration) error {
+	if age < time.Millisecond {
+		return errors.New("age can not less than 1 ms")
 	}
 
 	conn := s.Pool.Get()
@@ -17,26 +17,24 @@ func (s *RediStore) Lock(key, owner string, age int64) error {
 	if err := conn.Err(); err != nil {
 		return err
 	}
+
+	overdue := int64(age / time.Millisecond)
 	for {
-		reply, err := conn.Do("GET", key)
+		reply, err := conn.Do("SET", key, owner, "NX", "PX", overdue)
+		r, err := redis.String(reply, err)
 		if err != nil {
-			return err
-		}
-		if _, err := redis.String(reply, err); err != nil {
-			if err != ErrNil {
+			if err != redis.ErrNil {
 				return err
 			}
-			// not exist
-		} else {
-			time.Sleep(time.Second / 5) // 200ms do a retry
-			continue
+			// ErrNil
+		} else if r == "OK" {
+			return nil
 		}
-		if _, err = conn.Do("SETEX", key, age, owner); err != nil {
-			return err
-		}
-		// locked.
-		return nil
+
+		time.Sleep(time.Second / 100) // 10ms do a retry
+		continue
 	}
+	return nil
 }
 func (s *RediStore) Unlock(key, owner string) error {
 	conn := s.Pool.Get()

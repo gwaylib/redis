@@ -125,8 +125,8 @@ func (s *RediStore) ping() (bool, error) {
 
 // save stores the session in redis.
 // store data with json format
-// age -- seconds, 0 for no expired.
-func (s *RediStore) Set(key string, val interface{}, age int64) error {
+// age -- 0 for no expired.
+func (s *RediStore) Set(key string, val interface{}, age time.Duration) error {
 	b, err := json.Marshal(val)
 	if err != nil {
 		return err
@@ -136,10 +136,12 @@ func (s *RediStore) Set(key string, val interface{}, age int64) error {
 	if err = conn.Err(); err != nil {
 		return err
 	}
-	if age > 0 {
-		_, err = conn.Do("SETEX", key, age, b)
+	overdue := int64(age / time.Millisecond)
+	if overdue > 0 {
+		_, err = conn.Do("SET", key, b, "PX", overdue)
 		return err
 	}
+
 	_, err = conn.Do("SET", key, b)
 	return err
 }
