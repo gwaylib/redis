@@ -1,7 +1,7 @@
 package msq
 
 import (
-	"fmt"
+	"context"
 	"log"
 	"testing"
 	"time"
@@ -23,26 +23,12 @@ func TestMsq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mac, err := GetMAC()
-	if err != nil {
-		t.Fatal(err)
-	}
-	consumerName := fmt.Sprintf("%+v", mac)
-	consumer, err := NewRedisMsqConsumer(r, streamName, consumerName)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// auto claim, it will retry if no ack confirm after 5 minute.
 	overdue := 5 * time.Minute
-	go func() {
-		for {
-			if err := consumer.Claim(overdue); err != nil {
-				log.Println(errors.As(err))
-			}
-			time.Sleep(overdue)
-		}
-	}()
+
+	consumer, err := NewRedisClaimConsumer(context.TODO(), r, streamName, overdue)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// consume
 	limit := 10

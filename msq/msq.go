@@ -1,6 +1,9 @@
 package msq
 
 import (
+	"context"
+	"fmt"
+	"log"
 	"time"
 
 	redigo "github.com/gomodule/redigo/redis"
@@ -42,6 +45,31 @@ func NewRedisMsqConsumer(rs *redis.RediStore, streamName, consumerName string) (
 		}
 	}
 	return c, nil
+}
+
+func NewRedisClaimConsumer(ctx context.Context, rs *redis.RediStore, streamName string, claimDur time.Duration) (*RedisMsqConsumer, error) {
+	mac, err := GetMAC()
+	if err != nil {
+		return nil, errors.As(err)
+	}
+	consumerName := fmt.Sprintf("%+v", mac)
+	consumer, err := NewRedisMsqConsumer(rs, streamName, consumerName)
+	if err != nil {
+		return nil, errors.As(err)
+	}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+			default:
+				if err := consumer.Claim(claimDur); err != nil {
+					log.Println(errors.As(err))
+				}
+				time.Sleep(claimDur)
+			}
+		}
+	}()
+	return consumer, nil
 }
 
 func (c *RedisMsqConsumer) Next(limit int, timeout time.Duration) ([]redis.StreamEntry, error) {

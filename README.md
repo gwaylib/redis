@@ -78,26 +78,10 @@ if err := p.Put("msg title", []byte("msg body")); err != nil {
 	t.Fatal(err)
 }
 
-mac, err := msq.GetMAC()
+consumer, err := msq.NewRedisClaimConsumer(context.TODO(), r, streamName, 5*time.Minute)
 if err != nil {
 	t.Fatal(err)
 }
-consumerName := fmt.Sprintf("%+v", mac)
-consumer, err := msq.NewRedisMsqConsumer(r, streamName, consumerName)
-if err != nil {
-	t.Fatal(err)
-}
-
-// auto claim, it will retry if no ack confirm after 5 minute.
-overdue := 5 * time.Minute
-go func() {
-	for {
-		if err := consumer.Claim(overdue); err != nil {
-			log.Println(errors.As(err))
-		}
-		time.Sleep(overdue)
-	}
-}()
 
 // consume
 limit := 10
