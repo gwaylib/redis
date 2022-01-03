@@ -36,7 +36,7 @@ type RedisMsqConsumer struct {
 	consumerName string
 }
 type RedisAutoConsumerCfg struct {
-	Rs            *redis.RediStore
+	Redis         *redis.RediStore
 	StreamName    string
 	ClientMemIdx  int // will set the client id with MAC_MemIdx
 	ClaimDuration time.Duration
@@ -59,7 +59,7 @@ func NewRedisAutoConsumer(ctx context.Context, cfg RedisAutoConsumerCfg) (*Redis
 		return nil, errors.As(err)
 	}
 	consumerName := fmt.Sprintf("%+v_%d", mac, cfg.ClientMemIdx)
-	consumer, err := NewRedisMsqConsumer(cfg.Rs, cfg.StreamName, consumerName)
+	consumer, err := NewRedisMsqConsumer(cfg.Redis, cfg.StreamName, consumerName)
 	if err != nil {
 		return nil, errors.As(err)
 	}
