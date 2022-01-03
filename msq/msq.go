@@ -35,6 +35,12 @@ type RedisMsqConsumer struct {
 	streamName   string
 	consumerName string
 }
+type RedisAutoConsumerCfg struct {
+	Rs            *redis.RediStore
+	StreamName    string
+	ClientMemIdx  int // will set the client id with MAC_MemIdx
+	ClaimDuration time.Duration
+}
 
 func NewRedisMsqConsumer(rs *redis.RediStore, streamName, consumerName string) (*RedisMsqConsumer, error) {
 	c := &RedisMsqConsumer{rs: rs, streamName: streamName, consumerName: consumerName}
@@ -47,13 +53,13 @@ func NewRedisMsqConsumer(rs *redis.RediStore, streamName, consumerName string) (
 	return c, nil
 }
 
-func NewRedisClaimConsumer(ctx context.Context, rs *redis.RediStore, streamName string, claimDur time.Duration) (*RedisMsqConsumer, error) {
+func NewRedisAutoConsumer(ctx context.Context, cfg RedisAutoConsumerCfg) (*RedisMsqConsumer, error) {
 	mac, err := GetMAC()
 	if err != nil {
 		return nil, errors.As(err)
 	}
-	consumerName := fmt.Sprintf("%+v", mac)
-	consumer, err := NewRedisMsqConsumer(rs, streamName, consumerName)
+	consumerName := fmt.Sprintf("%+v_%d", mac, cfg.ClientMemIdx)
+	consumer, err := NewRedisMsqConsumer(cfg.Rs, cfg.StreamName, consumerName)
 	if err != nil {
 		return nil, errors.As(err)
 	}
@@ -62,10 +68,10 @@ func NewRedisClaimConsumer(ctx context.Context, rs *redis.RediStore, streamName 
 			select {
 			case <-ctx.Done():
 			default:
-				if err := consumer.Claim(claimDur); err != nil {
+				if err := consumer.Claim(cfg.ClaimDuration); err != nil {
 					log.Println(errors.As(err))
 				}
-				time.Sleep(claimDur)
+				time.Sleep(cfg.ClaimDuration)
 			}
 		}
 	}()
