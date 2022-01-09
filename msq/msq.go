@@ -92,7 +92,16 @@ func NewRedisAutoConsumer(ctx context.Context, cfg RedisAutoConsumerCfg) (*Redis
 }
 
 func (c *RedisMsqConsumer) Next(limit int, timeout time.Duration) ([]redis.StreamEntry, error) {
-	return c.rs.XReadGroup(c.mainStream, c.mainStream, c.consumerName, limit, timeout)
+	for {
+		result, err := c.rs.XReadGroup(c.mainStream, c.mainStream, c.consumerName, limit, timeout)
+		if err != nil {
+			if err != redis.ErrNil {
+				return nil, err
+			}
+			continue
+		}
+		return result, nil
+	}
 }
 
 func (c *RedisMsqConsumer) ack(stream, entryId string) error {
