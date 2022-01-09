@@ -40,15 +40,15 @@ type RedisMsqConsumer struct {
 type RedisAutoConsumerCfg struct {
 	Redis         *redis.RediStore
 	StreamName    string
-	ClientMemIdx  int // will set the client id with MAC_MemIdx
-	ClaimDuration time.Duration
+	ClientMemIdx  int           // will set the client id with MAC_MemIdx
+	ClaimDuration time.Duration // need > 0
 }
 
 func NewRedisMsqConsumer(rs *redis.RediStore, mainStream, consumerName string) (*RedisMsqConsumer, error) {
 	c := &RedisMsqConsumer{
 		rs:           rs,
 		mainStream:   mainStream,
-		delayStream:  mainStream + "_delay",
+		delayStream:  mainStream + ".delay",
 		consumerName: consumerName,
 	}
 
@@ -112,14 +112,14 @@ func (c *RedisMsqConsumer) ACK(entryId string) error {
 }
 
 func (c *RedisMsqConsumer) reQueue(fromStream, toStream string, entry *redis.MessageEntry) error {
-	if len(entry.Fields) < 2 {
+	if len(entry.Fields) < 1 {
 		return errors.New("need param pair with entry.Fields")
 	}
 	key := entry.Fields[0].Key
-	val := entry.Fields[1].Value
+	val := entry.Fields[0].Value
 	kv := []interface{}{}
-	if len(entry.Fields) > 2 {
-		for _, f := range entry.Fields[2:] {
+	if len(entry.Fields) > 1 {
+		for _, f := range entry.Fields[1:] {
 			kv = append(kv, f.Key)
 			kv = append(kv, f.Value)
 		}
@@ -132,6 +132,7 @@ func (c *RedisMsqConsumer) reQueue(fromStream, toStream string, entry *redis.Mes
 
 // delay a message to delay stream, will ACK the message from the main stream.
 // the delay stream will trigger back by c.Claim function
+// the auto consumer will auto call the c.Clain, so it will also trigger back the delay message.
 func (c *RedisMsqConsumer) Delay(entry *redis.MessageEntry) error {
 	return c.reQueue(c.mainStream, c.delayStream, entry)
 }

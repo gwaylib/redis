@@ -25,9 +25,19 @@ func TestMsq(t *testing.T) {
 
 	overdue := 5 * time.Minute
 
-	consumer, err := NewRedisClaimConsumer(context.TODO(), r, streamName, overdue)
+	consumer, err := NewRedisAutoConsumer(context.TODO(), RedisAutoConsumerCfg{
+		Redis:         r,
+		StreamName:    streamName,
+		ClaimDuration: overdue,
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	handle := func(m *redis.MessageEntry) bool {
+		// TODO: handle something
+		//return false
+		return true
 	}
 
 	// consume
@@ -44,13 +54,17 @@ func TestMsq(t *testing.T) {
 		}
 		for _, e := range entries {
 			for _, msg := range e.Messages {
-
-				// TODO: handle something
-
-				// confirm handle done.
-				if err := consumer.ACK(msg.ID); err != nil {
-					log.Println(errors.As(err, msg))
+				if ok := handle(&msg); !ok {
+					if err := consumer.Delay(&msg); err != nil {
+						log.Println(errors.As(err, msg))
+					}
 					continue
+				} else {
+					// confirm handle done.
+					if err := consumer.ACK(msg.ID); err != nil {
+						log.Println(errors.As(err, msg))
+						continue
+					}
 				}
 			}
 		}
