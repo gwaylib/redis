@@ -32,7 +32,9 @@ func (p *RedisMsqProducer) Put(taskKey string, taskData []byte) error {
 type RedisMsqConsumer struct {
 	rs *redis.RediStore
 
-	streamName   string
+	mainStream  string
+	delayStream string
+
 	consumerName string
 }
 type RedisAutoConsumerCfg struct {
@@ -42,10 +44,21 @@ type RedisAutoConsumerCfg struct {
 	ClaimDuration time.Duration
 }
 
-func NewRedisMsqConsumer(rs *redis.RediStore, streamName, consumerName string) (*RedisMsqConsumer, error) {
-	c := &RedisMsqConsumer{rs: rs, streamName: streamName, consumerName: consumerName}
-	// make the group name same with streamName
-	if err := rs.XCreateGroup(streamName, streamName); err != nil {
+func NewRedisMsqConsumer(rs *redis.RediStore, mainStream, consumerName string) (*RedisMsqConsumer, error) {
+	c := &RedisMsqConsumer{
+		rs:           rs,
+		mainStream:   mainStream,
+		delayStream:  mainStream + "_delay",
+		consumerName: consumerName,
+	}
+
+	// make the group name same with mainStream
+	if err := rs.XCreateGroup(mainStream, mainStream); err != nil {
+		if redis.ErrDataExist != err {
+			return nil, errors.As(err)
+		}
+	}
+	if err := rs.XCreateGroup(c.delayStream, c.delayStream); err != nil {
 		if redis.ErrDataExist != err {
 			return nil, errors.As(err)
 		}
@@ -79,26 +92,76 @@ func NewRedisAutoConsumer(ctx context.Context, cfg RedisAutoConsumerCfg) (*Redis
 }
 
 func (c *RedisMsqConsumer) Next(limit int, timeout time.Duration) ([]redis.StreamEntry, error) {
-	return c.rs.XReadGroup(c.streamName, c.streamName, c.consumerName, limit, timeout)
+	return c.rs.XReadGroup(c.mainStream, c.mainStream, c.consumerName, limit, timeout)
 }
 
-// confirm the message has deal, and delete it in the msq
-// TODO: more testing on redis.XDEL
-func (c RedisMsqConsumer) ACK(entryId string) error {
-	if _, err := c.rs.XDel(c.streamName, entryId); err != nil {
+func (c *RedisMsqConsumer) ack(stream, entryId string) error {
+	if _, err := c.rs.XDel(stream, entryId); err != nil {
 		return err
 	}
-	if _, err := c.rs.XACK(c.streamName, c.streamName, entryId); err != nil {
+	if _, err := c.rs.XACK(stream, stream, entryId); err != nil {
 		return err
 	}
 	return nil
 }
 
+// confirm the message has deal, and delete it in the msq
+// TODO: more testing on redis.XDEL
+func (c *RedisMsqConsumer) ACK(entryId string) error {
+	return c.ack(c.mainStream, entryId)
+}
+
+func (c *RedisMsqConsumer) reQueue(fromStream, toStream string, entry *redis.MessageEntry) error {
+	if len(entry.Fields) < 2 {
+		return errors.New("need param pair with entry.Fields")
+	}
+	key := entry.Fields[0].Key
+	val := entry.Fields[1].Value
+	kv := []interface{}{}
+	if len(entry.Fields) > 2 {
+		for _, f := range entry.Fields[2:] {
+			kv = append(kv, f.Key)
+			kv = append(kv, f.Value)
+		}
+	}
+	if _, err := c.rs.XAdd(toStream, key, val, kv...); err != nil {
+		return err
+	}
+	return c.ack(fromStream, entry.ID)
+}
+
+// delay a message to delay stream, will ACK the message from the main stream.
+// the delay stream will trigger back by c.Claim function
+func (c *RedisMsqConsumer) Delay(entry *redis.MessageEntry) error {
+	return c.reQueue(c.mainStream, c.delayStream, entry)
+}
+
+func (c *RedisMsqConsumer) delayBack(timeout time.Duration) error {
+	limit := 10
+	for {
+		entries, err := c.rs.XReadGroup(c.delayStream, c.delayStream, c.consumerName, limit, timeout)
+		if err != nil {
+			return err
+		}
+		for _, e := range entries {
+			for _, m := range e.Messages {
+				if err := c.reQueue(c.delayStream, c.mainStream, &m); err != nil {
+					return err
+				}
+			}
+		}
+		if len(entries) < 10 {
+			return nil
+		}
+	}
+	return nil
+}
+
 // recover the dead client messages to self.
-func (c *RedisMsqConsumer) Claim(overdue time.Duration) error {
+func (c *RedisMsqConsumer) claim(overdue time.Duration) error {
 	const limit = 10
 emptyLoop:
-	pending, err := c.rs.XPending(c.streamName, c.streamName, limit)
+	pending, err := c.rs.XPending(c.mainStream, c.mainStream, limit)
 	if err != nil {
 		return err
 	}
@@ -126,7 +189,7 @@ emptyLoop:
 			// not reached the time
 			continue
 		}
-		if err := c.rs.XClaim(c.streamName, c.streamName, id, c.consumerName, overdue); err != nil {
+		if err := c.rs.XClaim(c.mainStream, c.mainStream, id, c.consumerName, overdue); err != nil {
 			return err
 		}
 	}
@@ -134,4 +197,12 @@ emptyLoop:
 		goto emptyLoop
 	}
 	return nil
+}
+
+// recover the dead client messages to self.
+func (c *RedisMsqConsumer) Claim(overdue time.Duration) error {
+	if err := c.claim(overdue); err != nil {
+		return err
+	}
+	return c.delayBack(overdue)
 }
