@@ -95,23 +95,6 @@ func (s *RediStore) Close() error {
 	return s.Pool.Close()
 }
 
-func (s *RediStore) Do(cmd string, args ...interface{}) (interface{}, error) {
-	conn := s.Pool.Get()
-	defer conn.Close()
-	return conn.Do(cmd, args...)
-}
-
-// Delete removes the session from redis.
-//
-func (s *RediStore) Delete(key string) error {
-	conn := s.Pool.Get()
-	defer conn.Close()
-	if _, err := conn.Do("DEL", key); err != nil {
-		return err
-	}
-	return nil
-}
-
 // ping does an internal ping against a server to check if it is alive.
 func (s *RediStore) ping() (bool, error) {
 	conn := s.Pool.Get()
@@ -123,10 +106,48 @@ func (s *RediStore) ping() (bool, error) {
 	return (data == "PONG"), nil
 }
 
+func (s *RediStore) Do(cmd string, args ...interface{}) (interface{}, error) {
+	conn := s.Pool.Get()
+	defer conn.Close()
+	return conn.Do(cmd, args...)
+}
+
+// Delete removes the session from redis.
+func (s *RediStore) Delete(key string) error {
+	conn := s.Pool.Get()
+	defer conn.Close()
+	if _, err := conn.Do("DEL", key); err != nil {
+		return err
+	}
+	return nil
+}
+
+// When the next corsor return is 0, it means that there is no more data
+func (s *RediStore) ScanKey(cursor int64, pattern string, limit int) (int64, [][]byte, error) {
+	conn := s.Pool.Get()
+	defer conn.Close()
+	val, err := redis.Values(conn.Do("SCAN", cursor, "MATCH", pattern, "COUNT", limit))
+	if err != nil {
+		return 0, nil, err
+	}
+	nextCursor, err := redis.Int64(val[0], nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	result, err := redis.ByteSlices(val[1], nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	if nextCursor == 0 && len(result) == 0 {
+		return 0, result, ErrNil
+	}
+	return nextCursor, result, err
+}
+
 // save stores the session in redis.
 // store data with json format
 // age -- 0 for no expired.
-func (s *RediStore) Set(key string, val interface{}, age time.Duration) error {
+func (s *RediStore) PutJSON(key string, val interface{}, age time.Duration) error {
 	b, err := json.Marshal(val)
 	if err != nil {
 		return err
@@ -147,7 +168,7 @@ func (s *RediStore) Set(key string, val interface{}, age time.Duration) error {
 }
 
 // scan the data to a json interface.
-func (s *RediStore) Scan(key string, val interface{}) error {
+func (s *RediStore) ScanJSON(key string, val interface{}) error {
 	conn := s.Pool.Get()
 	defer conn.Close()
 	if err := conn.Err(); err != nil {

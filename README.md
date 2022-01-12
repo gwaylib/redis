@@ -13,7 +13,7 @@ if err != nil {
 defer r.Close()
 
 id := 1
-if err := r.Set("testing", id, 0); err != nil {
+if err := r.PutJSON("testing", id, 0); err != nil {
 	t.Fatal(err)
 }
 defer func(){
@@ -23,7 +23,7 @@ defer func(){
 }()
 
 outId := 0
-if err := r.Scan("testing", &outId); err != nil {
+if err := r.ScanJSON("testing", &outId); err != nil {
 	t.Fatal(err)
 }
 ```
@@ -38,12 +38,12 @@ defer r.Close()
 
 id := 1
 timeout := 60 // seconds
-if err := r.Set("testing", id, timeout); err != nil {
+if err := r.PutJSON("testing", id, timeout); err != nil {
 	t.Fatal(err)
 }
 
 outId := 0
-if err := r.Scan("testing", &outId); err != nil {
+if err := r.ScanJSON("testing", &outId); err != nil {
 	t.Fatal(err)
 }
 ```
