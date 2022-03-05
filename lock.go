@@ -1,13 +1,23 @@
 package redis
 
 import (
-	"errors"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/gwaylib/errors"
+)
+
+var (
+	ErrLocked = errors.New("Another client has locked")
 )
 
 func (s *RediStore) Lock(key, owner string, age time.Duration) error {
+	return s.lock(key, owner, age, true)
+}
+func (s *RediStore) TryLock(key, owner string, age time.Duration) error {
+	return s.lock(key, owner, age, false)
+}
+func (s *RediStore) lock(key, owner string, age time.Duration, wait bool) error {
 	if age < time.Millisecond {
 		return errors.New("age can not less than 1 ms")
 	}
@@ -31,6 +41,9 @@ func (s *RediStore) Lock(key, owner string, age time.Duration) error {
 			return nil
 		}
 
+		if !wait {
+			return ErrLocked.As(key, owner)
+		}
 		time.Sleep(time.Second / 100) // 10ms do a retry
 		continue
 	}
