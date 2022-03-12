@@ -82,7 +82,9 @@ func NewRedisAutoConsumer(ctx context.Context, cfg RedisAutoConsumerCfg) (*Redis
 			case <-ctx.Done():
 			default:
 				if err := consumer.Claim(cfg.ClaimDuration); err != nil {
-					log.Println(errors.As(err))
+					if redis.ErrNil != err {
+						log.Println(errors.As(err))
+					}
 				}
 				time.Sleep(cfg.ClaimDuration)
 			}
