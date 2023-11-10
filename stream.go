@@ -19,8 +19,8 @@ type MessageEntry struct {
 }
 
 type StreamEntry struct {
-	Name     string
-	Messages []MessageEntry
+	StreamName string
+	Messages   []MessageEntry
 }
 
 func FieldEntries(replay interface{}, err error) ([]FieldEntry, error) {
@@ -98,8 +98,8 @@ func StreamEntries(reply interface{}, err error) ([]StreamEntry, error) {
 			return nil, err
 		}
 		entries[i] = StreamEntry{
-			Name:     streamName,
-			Messages: streamMsgs,
+			StreamName: streamName,
+			Messages:   streamMsgs,
 		}
 	}
 	return entries, nil

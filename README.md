@@ -73,18 +73,18 @@ defer r.Unlock(key, owner)
 	}
 	defer r.Close()
 
-	p := NewRedisMsqProducer(r, streamName)
+	p := NewMsqProducer(r, streamName)
 	if err := p.Put("msg title", []byte("msg body")); err != nil {
 		log.Fatal(err)
 	}
 
-	overdue := 5 * time.Minute
-
-	consumer, err := NewRedisAutoConsumer(context.TODO(), RedisAutoConsumerCfg{
-		Redis:         r,
-		StreamName:    streamName,
-		ClaimDuration: overdue,
-	})
+	delayOverdue := 5 * time.Minute
+	consumer, err := NewMsqConsumer(context.TODO(),
+		r,
+		streamName,
+        "0", // if you have a multiply reader, you need set a different client id.
+		delayOrverdue,
+	)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -96,34 +96,14 @@ defer r.Unlock(key, owner)
 	}
 
 	// consume
-	limit := 10
-	// for {
-	for n := 0; n < 1; n++ {
-		entries, err := consumer.Next(limit, overdue)
-		if err != nil {
-			if err != redis.ErrNil {
-				log.Println(errors.As(err))
-			}
-			// the server is still alive, keeping read
-			continue
-		}
-		for _, e := range entries {
-			for _, msg := range e.Messages {
-				if ok := handle(&msg); !ok {
-					if err := consumer.Delay(&msg); err != nil {
-						log.Println(errors.As(err, msg))
-					}
-					continue
-				} else {
-					// confirm handle done.
-					if err := consumer.ACK(msg.ID); err != nil {
-						log.Println(errors.As(err, msg))
-						continue
-					}
-				}
-			}
-		}
-	}
+    // for test, you can set the loop with times.
+    for {
+        if err := consumer.Next(handle); err != nil{
+            log.Warn(errors.As(err))
+            time.Sleep(time.Second)
+        }
+    }
+
 ```
 
 ## License
