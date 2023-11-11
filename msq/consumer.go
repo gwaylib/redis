@@ -12,6 +12,13 @@ import (
 
 type MsqConsumerHandleFunc func(*redis.MessageEntry) bool
 
+func FirstMsqEntry(entry *redis.MessageEntry) (string, []byte, bool) {
+	if len(entry.Fields) == 0 {
+		return "", nil, false
+	}
+	return entry.Fields[0].Key, entry.Fields[0].Value, true
+}
+
 // https://redis.io/docs/data-types/streams/
 // https://redis.io/commands/xclaim/
 type MsqConsumer interface {

@@ -18,25 +18,34 @@ func TestMsq(t *testing.T) {
 	}
 	defer r.Close()
 
-	p := NewRedisMsqProducer(r, streamName)
+	p := NewMsqProducer(r, streamName)
 	if err := p.Put("msg title", []byte("msg body")); err != nil {
 		t.Fatal(err)
 	}
 
 	overdue := 5 * time.Minute
-
-	consumer, err := NewRedisAutoConsumer(context.TODO(), RedisAutoConsumerCfg{
-		Redis:         r,
-		StreamName:    streamName,
-		ClaimDuration: overdue,
-	})
+	consumer, err := NewMsqConsumer(context.TODO(),
+		r,
+		streamName,
+		"0",
+		overdue,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	handle := func(m *redis.MessageEntry) bool {
-		// TODO: handle something
-		//return false
+		// handle something
+		key, val, ok := FirstMsqEntry(m)
+		if !ok {
+			return false
+		}
+		if key != "msg title" {
+			return false
+		}
+		if string(val) != "msg body" {
+			return false
+		}
 		return true
 	}
 
@@ -44,7 +53,7 @@ func TestMsq(t *testing.T) {
 	limit := 10
 	// for {
 	for n := 0; n < 1; n++ {
-		entries, err := consumer.Next(limit, overdue)
+		entries, err := consumer.Read(limit, overdue)
 		if err != nil {
 			if err != redis.ErrNil {
 				log.Println(errors.As(err))
