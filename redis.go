@@ -6,6 +6,7 @@
 package redis
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"time"
@@ -77,6 +78,20 @@ func NewRediStoreWithDB(size int, network, address, password, DB string) (*RediS
 		},
 		Dial: func() (redis.Conn, error) {
 			return dialWithDB(network, address, password, DB)
+		},
+	})
+}
+
+func NewRedisStoreWithURL(ctx context.Context, size int, rawurl string, options ...redis.DialOption) (*RediStore, error) {
+	return NewRediStoreWithPool(&redis.Pool{
+		MaxIdle:     size,
+		IdleTimeout: 240 * time.Second,
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
+		Dial: func() (redis.Conn, error) {
+			return redis.DialURLContext(ctx, rawurl, options...)
 		},
 	})
 }

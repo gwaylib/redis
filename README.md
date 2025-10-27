@@ -6,7 +6,7 @@ Depends on redis 5.0.3
 
 ### Store long-term data
 ```golang
-r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "")
+r, err := redis.NewRediStoreWithURL(context.TODO, 10, "redis://user:secret@localhost:6379/0?foo=bar&qux=baz")
 if err != nil {
 	t.Fatal(err)
 }
@@ -30,7 +30,7 @@ if err := r.ScanJSON("testing", &outId); err != nil {
 
 ### Store timed data
 ```golang
-r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "")
+r, err := redis.NewRediStoreWithURL(context.TODO, 10, "redis://user:secret@localhost:6379/0?foo=bar&qux=baz")
 if err != nil {
 	t.Fatal(err)
 }
@@ -50,7 +50,7 @@ if err := r.ScanJSON("testing", &outId); err != nil {
 
 ### Distributed lock
 ```golang
-r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "")
+r, err := redis.NewRediStoreWithURL(context.TODO, 10, "redis://user:secret@localhost:6379/0?foo=bar&qux=baz")
 if err != nil {
 	t.Fatal(err)
 }
@@ -67,7 +67,7 @@ defer r.Unlock(key, owner)
 ### Message queue
 ```golang
 	streamName := "logs-stream"
-	r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "")
+    r, err := redis.NewRediStoreWithURL(context.TODO, 10, "redis://user:secret@localhost:6379/0?foo=bar&qux=baz")
 	if err != nil {
 		log.Fatal(err)
 	}
