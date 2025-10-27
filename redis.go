@@ -199,3 +199,29 @@ func (s *RediStore) ScanJSON(key string, val interface{}) error {
 	}
 	return json.Unmarshal(out, val)
 }
+
+func (s *RediStore) Get(key string) (interface{}, error) {
+	conn := s.Pool.Get()
+	defer conn.Close()
+	if err := conn.Err(); err != nil {
+		return nil, err
+	}
+	return conn.Do("GET", key)
+}
+
+func (s *RediStore) Put(key string, val interface{}, age time.Duration) error {
+	conn := s.Pool.Get()
+	defer conn.Close()
+	if err := conn.Err(); err != nil {
+		return err
+	}
+	var err error
+	overdue := int64(age / time.Millisecond)
+	if overdue > 0 {
+		_, err = conn.Do("SET", key, val, "PX", overdue)
+		return err
+	}
+
+	_, err = conn.Do("SET", key, val)
+	return err
+}
