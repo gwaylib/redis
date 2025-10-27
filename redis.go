@@ -82,7 +82,7 @@ func NewRediStoreWithDB(size int, network, address, password, DB string) (*RediS
 	})
 }
 
-func NewRedisStoreWithURL(ctx context.Context, size int, rawurl string, options ...redis.DialOption) (*RediStore, error) {
+func NewRediStoreWithURL(ctx context.Context, size int, rawurl string, options ...redis.DialOption) (*RediStore, error) {
 	return NewRediStoreWithPool(&redis.Pool{
 		MaxIdle:     size,
 		IdleTimeout: 240 * time.Second,
