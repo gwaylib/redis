@@ -91,17 +91,16 @@ defer r.Unlock(key, owner)
 
 	handle := func(m *redis.MessageEntry) bool {
 		// TODO: handle something
+		fmt.Println(*m) // {1762171946318-0 [{msg title [109 115 103 32 98 111 100 121]}]}
+
 		//return false
-		return true
+		return true // ack for delete
 	}
 
 	// consume
-    // for test, you can set the loop with times.
-    for {
-        if err := consumer.Next(handle); err != nil{
-            log.Warn(errors.As(err))
-            time.Sleep(time.Second)
-        }
+    // loop block, here is for testing, it should be ran with goroutine.
+    if err := consumer.Next(handle); err != nil{
+        log.Warn(errors.As(err))
     }
 
 ```

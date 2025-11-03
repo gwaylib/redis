@@ -72,7 +72,6 @@ func newMsqConsumer(ctx context.Context, rs *redis.RediStore, mainStream, client
 // make a consumer wigth auto claim
 // ctx, a context
 // rs
-//
 func NewMsqConsumer(ctx context.Context, rs *redis.RediStore, streamName, clientId string, delayDuration time.Duration) (*redisMsqConsumer, error) {
 	consumer, err := newMsqConsumer(ctx, rs, streamName, clientId, delayDuration)
 	if err != nil {
@@ -97,10 +96,11 @@ func NewMsqConsumer(ctx context.Context, rs *redis.RediStore, streamName, client
 }
 
 func (c *redisMsqConsumer) Close() error {
+	c.rs.Close()
 	c.exit <- true // for read loop
 	c.exit <- true // for claim loop
 	c.exit <- true // for next loop
-	return c.rs.Close()
+	return nil
 }
 
 func (c *redisMsqConsumer) Read(limit int, timeout time.Duration) ([]redis.StreamEntry, error) {
@@ -241,7 +241,9 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 	for {
 		select {
 		case <-c.exit:
+			return nil
 		case <-c.ctx.Done():
+			return nil
 		default:
 			entries, err := c.Read(10, c.delayDuration)
 			if err != nil {
@@ -268,5 +270,4 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 			}
 		}
 	}
-	return nil
 }

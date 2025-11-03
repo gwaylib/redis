@@ -2,71 +2,49 @@ package msq
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"testing"
 	"time"
 
-	"github.com/gwaylib/errors"
 	"github.com/gwaylib/redis"
 )
 
 func TestMsq(t *testing.T) {
 	streamName := "logs-stream"
-	r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "")
+	r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "pE91R5Chal1p3y3yRrQtJJ^M")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
 
-	p := NewRedisMsqProducer(r, streamName)
+	p := NewMsqProducer(r, streamName)
 	if err := p.Put("msg title", []byte("msg body")); err != nil {
 		t.Fatal(err)
 	}
 
 	overdue := 5 * time.Minute
 
-	consumer, err := NewRedisAutoConsumer(context.TODO(), RedisAutoConsumerCfg{
-		Redis:         r,
-		StreamName:    streamName,
-		ClaimDuration: overdue,
-	})
+	consumer, err := NewMsqConsumer(context.TODO(),
+		r, streamName, "default", overdue,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	handle := func(m *redis.MessageEntry) bool {
 		// TODO: handle something
-		//return false
-		return true
+		//return false // wait next
+
+		fmt.Println(*m) // {1762171946318-0 [{msg title [109 115 103 32 98 111 100 121]}]}
+		return true     // ack
 	}
 
-	// consume
-	limit := 10
-	// for {
-	for n := 0; n < 1; n++ {
-		entries, err := consumer.Next(limit, overdue)
-		if err != nil {
-			if err != redis.ErrNil {
-				log.Println(errors.As(err))
-			}
-			// the server is still alive, keeping read
-			continue
+	go func() {
+		// consume
+		if err := consumer.Next(handle); err != nil {
+			fmt.Println(err)
 		}
-		for _, e := range entries {
-			for _, msg := range e.Messages {
-				if ok := handle(&msg); !ok {
-					if err := consumer.Delay(&msg); err != nil {
-						log.Println(errors.As(err, msg))
-					}
-					continue
-				} else {
-					// confirm handle done.
-					if err := consumer.ACK(msg.ID); err != nil {
-						log.Println(errors.As(err, msg))
-						continue
-					}
-				}
-			}
-		}
-	}
+	}()
+	time.Sleep(1e9)
+	consumer.Close()
 }
