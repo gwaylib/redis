@@ -99,8 +99,11 @@ defer r.Unlock(key, owner)
 
 	// consume
     // loop block, here is for testing, it should be ran with goroutine.
-    if err := consumer.Next(handle); err != nil{
-        log.Warn(errors.As(err))
+    for {
+        if err := consumer.Next(handle); err != nil{
+            log.Warn(errors.As(err))
+            time.Sleep(time.Second)
+        }
     }
 
 ```
