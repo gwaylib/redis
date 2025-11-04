@@ -10,7 +10,7 @@ import (
 	"github.com/gwaylib/redis"
 )
 
-type MsqConsumerHandleFunc func(*redis.MessageEntry) bool
+type MsqConsumerHandleFunc func(id string, entry *redis.FieldEntry) bool
 
 // https://redis.io/docs/data-types/streams/
 // https://redis.io/commands/xclaim/
@@ -255,7 +255,14 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 			}
 			for _, e := range entries {
 				for _, msg := range e.Messages {
-					if ok := handleFn(&msg); !ok {
+					if len(msg.Fields) != 1 {
+						// not the producer protocal entry
+						if err := c.Delay(&msg); err != nil {
+							return errors.As(err, msg)
+						}
+						continue
+					}
+					if ok := handleFn(msg.ID, &msg.Fields[0]); !ok {
 						if err := c.Delay(&msg); err != nil {
 							return errors.As(err, msg)
 						}

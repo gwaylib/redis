@@ -89,11 +89,11 @@ defer r.Unlock(key, owner)
 		log.Fatal(err)
 	}
 
-	handle := func(m *redis.MessageEntry) bool {
+	handle := func(id string, e *redis.FieldEntry) bool {
 		// TODO: handle something
-		fmt.Println(*m) // {1762171946318-0 [{msg title [109 115 103 32 98 111 100 121]}]}
+		//return false // wait next
 
-		//return false
+		fmt.Println(id, *e) // 1762218531415-0 {key [98 111 100 121]}
 		return true // ack for delete
 	}
 

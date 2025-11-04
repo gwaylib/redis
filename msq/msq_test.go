@@ -18,7 +18,7 @@ func TestMsq(t *testing.T) {
 	defer r.Close()
 
 	p := NewMsqProducer(r, streamName)
-	if err := p.Put("msg title", []byte("msg body")); err != nil {
+	if err := p.Put("key", []byte("body")); err != nil {
 		t.Fatal(err)
 	}
 
@@ -31,12 +31,12 @@ func TestMsq(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handle := func(m *redis.MessageEntry) bool {
+	handle := func(id string, e *redis.FieldEntry) bool {
 		// TODO: handle something
 		//return false // wait next
 
-		fmt.Println(*m) // {1762171946318-0 [{msg title [109 115 103 32 98 111 100 121]}]}
-		return true     // ack
+		fmt.Println(id, *e) // 1762218531415-0 {key [98 111 100 121]}
+		return true         // ack for delete
 	}
 
 	go func() {
