@@ -251,6 +251,8 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 					return errors.As(err)
 				}
 				// the server is still alive, keeping read
+				log.Println(errors.As(err))
+				time.Sleep(time.Second)
 				continue
 			}
 			for _, e := range entries {
