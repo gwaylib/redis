@@ -8,7 +8,8 @@ import (
 )
 
 var (
-	ErrLocked = errors.New("Another client has locked")
+	ErrLocked   = errors.New("Another client has locked")
+	ErrNotOwner = errors.New("Only onwer can be unlocked")
 )
 
 func (s *RediStore) Lock(key, owner string, age time.Duration) error {
@@ -45,9 +46,7 @@ func (s *RediStore) lock(key, owner string, age time.Duration, wait bool) error 
 			return ErrLocked.As(key, owner)
 		}
 		time.Sleep(time.Second / 100) // 10ms do a retry
-		continue
 	}
-	return nil
 }
 func (s *RediStore) Unlock(key, owner string) error {
 	conn := s.Pool.Get()
@@ -69,7 +68,7 @@ func (s *RediStore) Unlock(key, owner string) error {
 		return nil
 	}
 	if storeOwner != owner {
-		return nil
+		return ErrNotOwner
 	}
 	if _, err := conn.Do("DEL", key); err != nil {
 		return err
