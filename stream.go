@@ -134,23 +134,18 @@ func (s *RediStore) XTrim(streamName string, maxLen int) (int, error) {
 	return redis.Int(conn.Do("XTRIM", args...))
 }
 
-func (s *RediStore) XLen(streamName string) (int, error) {
-	args := []interface{}{
-		streamName, // stream_name
-	}
-
+func (s *RediStore) XLen(streamName string) (int64, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
-	return redis.Int(conn.Do("XLEN", args...))
+	return redis.Int64(conn.Do("XLEN", streamName))
 }
 
-func (s *RediStore) XDel(streamName, msgId string, otherIds ...interface{}) (int, error) {
-	args := []interface{}{
-		streamName,
-		msgId,
-	}
-	if len(otherIds) > 0 {
-		args = append(args, otherIds...)
+func (s *RediStore) XDel(streamName, msgId string, otherIds ...string) (int, error) {
+	args := make([]interface{}, len(otherIds)+2)
+	args[0] = streamName
+	args[1] = msgId
+	for i, next := range otherIds {
+		args[i] = next
 	}
 
 	conn := s.Pool.Get()
@@ -221,7 +216,7 @@ func (s *RediStore) XReadGroup(streamName, groupName, consumerName string, limit
 	}
 
 	// goto the block mode
-	return StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "BLOCK", int64(timeout/(1000*1000)), "COUNT", limit, "STREAMS", streamName, ">"))
+	return StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "BLOCK", int64(timeout/1e6), "COUNT", limit, "STREAMS", streamName, ">"))
 }
 
 func (s *RediStore) XACK(streamName, groupName, entryId string) (int, error) {
@@ -244,7 +239,8 @@ func (s *RediStore) XPending(streamName, groupName string, limit int64) ([]inter
 func (s *RediStore) XClaim(streamName, groupName, entryId, toConsumerName string, overDuration time.Duration) error {
 	conn := s.Pool.Get()
 	defer conn.Close()
-	if _, err := conn.Do("XCLAIM", streamName, groupName, toConsumerName, int64(overDuration/(1000*1000)), entryId); err != nil {
+	// the redis only support ms second
+	if _, err := conn.Do("XCLAIM", streamName, groupName, toConsumerName, int64(overDuration/1e6), entryId); err != nil {
 		return err
 	}
 	return nil

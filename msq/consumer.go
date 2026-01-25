@@ -30,6 +30,9 @@ type MsqConsumer interface {
 	// it will block the thread to wait the entry;
 	// if a error happend, the caller need recall the Next function.
 	Next(handleFn MsqConsumerHandleFunc) error
+	// message lenght
+	// the first return is length of the normal queue, the second return is length of the delay quque
+	Len() (int64, int64, error)
 }
 
 type redisMsqConsumer struct {
@@ -101,6 +104,17 @@ func (c *redisMsqConsumer) Close() error {
 	c.exit <- true // for claim loop
 	c.exit <- true // for next loop
 	return nil
+}
+func (c *redisMsqConsumer) Len() (int64, int64, error) {
+	mainLen, err := c.rs.XLen(c.mainStream)
+	if err != nil {
+		return 0, 0, errors.As(err)
+	}
+	delayLen, err := c.rs.XLen(c.delayStream)
+	if err != nil {
+		return 0, 0, errors.As(err)
+	}
+	return mainLen, delayLen, nil
 }
 
 func (c *redisMsqConsumer) Read(limit int, timeout time.Duration) ([]redis.StreamEntry, error) {
@@ -177,7 +191,7 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 				}
 			}
 		}
-		if len(entries) < 10 {
+		if len(entries) < limit {
 			return nil
 		}
 	}
@@ -238,6 +252,7 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 	if handleFn == nil {
 		panic("the handle function not set")
 	}
+	limit := 10
 	for {
 		select {
 		case <-c.exit:
@@ -245,7 +260,7 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 		case <-c.ctx.Done():
 			return nil
 		default:
-			entries, err := c.Read(10, c.delayDuration)
+			entries, err := c.Read(limit, c.delayDuration)
 			if err != nil {
 				if err != redis.ErrNil {
 					return errors.As(err)
@@ -258,7 +273,7 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 			for _, e := range entries {
 				for _, msg := range e.Messages {
 					if len(msg.Fields) != 1 {
-						// not the producer protocal entry
+						// not the producer protocal entry, delay it and need handle by others
 						if err := c.Delay(&msg); err != nil {
 							return errors.As(err, msg)
 						}

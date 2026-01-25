@@ -4,6 +4,7 @@ import "github.com/gwaylib/redis"
 
 type MsqProducer interface {
 	Close() error
+	Len() (int64, error) // return the length of queue
 	Put(taskKey string, taskData []byte) error
 }
 
@@ -20,6 +21,10 @@ func NewMsqProducer(rs *redis.RediStore, streamName string) MsqProducer {
 
 func (p *redisMsqProducer) Close() error {
 	return p.rs.Close()
+}
+
+func (p *redisMsqProducer) Len() (int64, error) {
+	return p.rs.XLen(p.streamName)
 }
 
 func (p *redisMsqProducer) Put(taskKey string, taskData []byte) error {
