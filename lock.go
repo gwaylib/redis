@@ -45,7 +45,7 @@ func (s *RediStore) lock(key, owner string, age time.Duration, wait bool) error 
 		if !wait {
 			return ErrLocked.As(key, owner)
 		}
-		time.Sleep(time.Second / 100) // 10ms do a retry
+		time.Sleep(time.Second / 10) // 100ms do a retry
 	}
 }
 func (s *RediStore) Unlock(key, owner string) error {
