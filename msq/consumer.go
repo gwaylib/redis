@@ -82,6 +82,12 @@ func NewMsqConsumer(ctx context.Context, rs *redis.RediStore, streamName, client
 	}
 	go func() {
 		delayTicker := time.NewTicker(delayDuration)
+		// do claim when start
+		if err := consumer.Claim(delayDuration); err != nil {
+			if redis.ErrNil != err {
+				log.Println(errors.As(err))
+			}
+		}
 		for {
 			select {
 			case <-consumer.exit:
