@@ -11,40 +11,72 @@ import (
 
 func TestMsq(t *testing.T) {
 	streamName := "logs-stream"
-	r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "pE91R5Chal1p3y3yRrQtJJ^M")
+	r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer r.Close()
 
 	p := NewMsqProducer(r, streamName)
-	if err := p.Put("key", []byte("body")); err != nil {
+	if err := p.Put("ack", []byte("body")); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Put("delay", []byte("body")); err != nil {
 		t.Fatal(err)
 	}
 
-	overdue := 5 * time.Minute
+	overdue := 5 * time.Second
 
-	consumer, err := NewMsqConsumer(context.TODO(),
+	consumer, err := newMsqConsumer(context.TODO(),
 		r, streamName, "default", overdue,
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	handle := func(id string, e *redis.FieldEntry) bool {
-		// TODO: handle something
-		//return false // wait next
-
-		fmt.Println(id, *e) // 1762218531415-0 {key [98 111 100 121]}
-		return true         // ack for delete
+	ackHandle := func(id string, e *redis.FieldEntry) bool {
+		fmt.Println("ack", id, *e) // 1762218531415-0 {key [98 111 100 121]}
+		return true                // ack for delete
+	}
+	reQueueHandle := func(id string, e *redis.FieldEntry) bool {
+		fmt.Println("requeue", id, *e) // 1762218531415-0 {key [98 111 100 121]}
+		return false                   // ack for delete
 	}
 
-	go func() {
-		// consume
-		if err := consumer.Next(handle); err != nil {
-			fmt.Println(err)
-		}
-	}()
-	time.Sleep(1e9)
+	// consume
+	// ack
+	if err := consumer.next(1, ackHandle); err != nil {
+		t.Fatal(err)
+	}
+	// delay
+	if err := consumer.next(1, reQueueHandle); err != nil {
+		t.Fatal(err)
+	}
+	// ack delay
+	_, delayLen, err := consumer.Len()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if delayLen != 1 {
+		t.Fatalf("expect 1, but:%d", delayLen)
+	}
+
+	// handle by manully
+	if err := consumer.Claim(1e9); err != nil {
+		t.Fatal(err)
+	}
+	if err := consumer.next(30, ackHandle); err != nil {
+		t.Fatal(err)
+	}
+	mainLen, delayLen, err := consumer.Len()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mainLen != 0 {
+		t.Fatalf("expect mainStream len 0, but:%d", mainLen)
+	}
+	if delayLen != 0 {
+		t.Fatalf("expect delayStream len 0, but:%d", delayLen)
+	}
 	consumer.Close()
 }

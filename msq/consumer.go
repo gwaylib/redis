@@ -82,12 +82,6 @@ func NewMsqConsumer(ctx context.Context, rs *redis.RediStore, streamName, client
 	}
 	go func() {
 		delayTicker := time.NewTicker(delayDuration)
-		// do claim when start
-		if err := consumer.Claim(delayDuration); err != nil {
-			if redis.ErrNil != err {
-				log.Println(errors.As(err))
-			}
-		}
 		for {
 			select {
 			case <-consumer.exit:
@@ -201,7 +195,6 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 			return nil
 		}
 	}
-	return nil
 }
 
 // recover the dead client messages to self.
@@ -249,9 +242,49 @@ emptyLoop:
 // recover the dead client messages to self.
 func (c *redisMsqConsumer) Claim(overdue time.Duration) error {
 	if err := c.claim(overdue); err != nil {
-		return err
+		return errors.As(err)
 	}
-	return c.delayBack(overdue)
+	if err := c.delayBack(overdue); err != nil {
+		return errors.As(err)
+	}
+	return nil
+}
+
+func (c redisMsqConsumer) next(limit int, handleFn MsqConsumerHandleFunc) error {
+	entries, err := c.Read(limit, c.delayDuration)
+	if err != nil {
+		if err != redis.ErrNil {
+			return errors.As(err)
+		}
+		// the server is still alive, keeping read
+		log.Println(errors.As(err))
+		time.Sleep(time.Second)
+		return nil
+	}
+	for _, e := range entries {
+		for _, msg := range e.Messages {
+			if len(msg.Fields) != 1 {
+				// not the producer protocal entry, delay it and need handle by others
+				if err := c.Delay(&msg); err != nil {
+					return errors.As(err, msg)
+				}
+				continue
+			}
+			if ok := handleFn(msg.ID, &msg.Fields[0]); !ok {
+				if err := c.Delay(&msg); err != nil {
+					return errors.As(err, msg)
+				}
+				continue
+			} else {
+				// confirm handle done.
+				if err := c.ACK(msg.ID); err != nil {
+					return errors.As(err, msg)
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
@@ -266,37 +299,8 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 		case <-c.ctx.Done():
 			return nil
 		default:
-			entries, err := c.Read(limit, c.delayDuration)
-			if err != nil {
-				if err != redis.ErrNil {
-					return errors.As(err)
-				}
-				// the server is still alive, keeping read
-				log.Println(errors.As(err))
-				time.Sleep(time.Second)
-				continue
-			}
-			for _, e := range entries {
-				for _, msg := range e.Messages {
-					if len(msg.Fields) != 1 {
-						// not the producer protocal entry, delay it and need handle by others
-						if err := c.Delay(&msg); err != nil {
-							return errors.As(err, msg)
-						}
-						continue
-					}
-					if ok := handleFn(msg.ID, &msg.Fields[0]); !ok {
-						if err := c.Delay(&msg); err != nil {
-							return errors.As(err, msg)
-						}
-						continue
-					} else {
-						// confirm handle done.
-						if err := c.ACK(msg.ID); err != nil {
-							return errors.As(err, msg)
-						}
-					}
-				}
+			if err := c.next(limit, handleFn); err != nil {
+				return errors.As(err)
 			}
 		}
 	}
