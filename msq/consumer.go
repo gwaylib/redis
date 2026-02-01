@@ -23,6 +23,8 @@ type MsqConsumer interface {
 	ACK(msgEntryId string) error
 	// Put the message to the delay queue
 	Delay(msgEntry *redis.MessageEntry) error
+	// call claim directly
+	Claim(timeout time.Duration) error
 
 	// Read the queue msg, and send to the handleFn
 	// if the handle function return true, auto send a ack to done the entry;
