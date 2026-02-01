@@ -127,8 +127,8 @@ func (c *redisMsqConsumer) Read(limit int, timeout time.Duration) ([]redis.Strea
 		default:
 			result, err := c.rs.XReadGroup(c.mainStream, c.mainStream, c.clientId, limit, timeout)
 			if err != nil {
-				if err != redis.ErrNil {
-					return nil, err
+				if errors.Equal(err, redis.ErrNil) {
+					return nil, errors.As(err)
 				}
 				continue
 			}
@@ -139,10 +139,10 @@ func (c *redisMsqConsumer) Read(limit int, timeout time.Duration) ([]redis.Strea
 
 func (c *redisMsqConsumer) ack(stream, entryId string) error {
 	if _, err := c.rs.XDel(stream, entryId); err != nil {
-		return err
+		return errors.As(err)
 	}
 	if _, err := c.rs.XACK(stream, stream, entryId); err != nil {
-		return err
+		return errors.As(err)
 	}
 	return nil
 }
@@ -167,7 +167,7 @@ func (c *redisMsqConsumer) reQueue(fromStream, toStream string, entry *redis.Mes
 		}
 	}
 	if _, err := c.rs.XAdd(toStream, key, val, kv...); err != nil {
-		return err
+		return errors.As(err)
 	}
 	return c.ack(fromStream, entry.ID)
 }
@@ -184,12 +184,12 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 	for {
 		entries, err := c.rs.XReadGroup(c.delayStream, c.delayStream, c.clientId, limit, timeout)
 		if err != nil {
-			return err
+			return errors.As(err)
 		}
 		for _, e := range entries {
 			for _, m := range e.Messages {
 				if err := c.reQueue(c.delayStream, c.mainStream, &m); err != nil {
-					return err
+					return errors.As(err)
 				}
 			}
 		}
@@ -210,14 +210,14 @@ emptyLoop:
 	for _, epl := range pending {
 		vals, err := redigo.Values(epl, nil)
 		if err != nil {
-			return err
+			return errors.As(err)
 		}
 		if len(vals) != 4 {
 			return errors.New("expect 4 values in epl")
 		}
 		id, err := redigo.String(vals[0], nil)
 		if err != nil {
-			return err
+			return errors.As(err)
 		}
 		//consumerName, err := redigo.String(vals[1], nil)
 		//if err != nil {
@@ -225,14 +225,14 @@ emptyLoop:
 		//}
 		processDur, err := redigo.Int(vals[2], nil)
 		if err != nil {
-			return err
+			return errors.As(err)
 		}
 		if processDur < int(overdue/(1000*1000)) {
 			// not reached the time
 			continue
 		}
 		if err := c.rs.XClaim(c.mainStream, c.mainStream, id, c.clientId, overdue); err != nil {
-			return err
+			return errors.As(err)
 		}
 	}
 	if len(pending) >= limit {
@@ -244,16 +244,10 @@ emptyLoop:
 // recover the dead client messages to self.
 func (c *redisMsqConsumer) Claim(overdue time.Duration) error {
 	if err := c.claim(overdue); err != nil {
-		if err != redis.ErrNil {
-			return errors.As(err)
-		}
-		return err
+		return errors.As(err)
 	}
 	if err := c.delayBack(overdue); err != nil {
-		if err != redis.ErrNil {
-			return errors.As(err)
-		}
-		return err
+		return errors.As(err)
 	}
 	return nil
 }
@@ -261,7 +255,7 @@ func (c *redisMsqConsumer) Claim(overdue time.Duration) error {
 func (c redisMsqConsumer) next(limit int, handleFn MsqConsumerHandleFunc) error {
 	entries, err := c.Read(limit, c.delayDuration)
 	if err != nil {
-		if err != redis.ErrNil {
+		if !errors.Equal(err, redis.ErrNil) {
 			return errors.As(err)
 		}
 		// the server is still alive, keeping read
