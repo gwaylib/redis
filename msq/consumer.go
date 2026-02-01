@@ -90,7 +90,7 @@ func NewMsqConsumer(ctx context.Context, rs *redis.RediStore, streamName, client
 			case <-consumer.ctx.Done():
 			case <-delayTicker.C:
 				if err := consumer.Claim(delayDuration); err != nil {
-					if redis.ErrNil != err {
+					if !errors.Equal(redis.ErrNil, err) {
 						log.Println(errors.As(err))
 					}
 				}
@@ -244,10 +244,16 @@ emptyLoop:
 // recover the dead client messages to self.
 func (c *redisMsqConsumer) Claim(overdue time.Duration) error {
 	if err := c.claim(overdue); err != nil {
-		return errors.As(err)
+		if err != redis.ErrNil {
+			return errors.As(err)
+		}
+		return err
 	}
 	if err := c.delayBack(overdue); err != nil {
-		return errors.As(err)
+		if err != redis.ErrNil {
+			return errors.As(err)
+		}
+		return err
 	}
 	return nil
 }
