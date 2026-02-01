@@ -184,7 +184,10 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 	for {
 		entries, err := c.rs.XReadGroup(c.delayStream, c.delayStream, c.clientId, limit, timeout)
 		if err != nil {
-			return errors.As(err)
+			if !errors.Equal(err, redis.ErrNil) {
+				return errors.As(err)
+			}
+			return nil
 		}
 		for _, e := range entries {
 			for _, m := range e.Messages {
