@@ -204,12 +204,12 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 // recover the dead client messages to self.
 func (c *redisMsqConsumer) claim(overdue time.Duration) error {
 	const limit = 10
-emptyLoop:
-	pending, err := c.rs.XPending(c.mainStream, c.mainStream, limit)
+emptyMainLoop:
+	mainPending, err := c.rs.XPending(c.mainStream, c.mainStream, limit)
 	if err != nil {
 		return err
 	}
-	for _, epl := range pending {
+	for _, epl := range mainPending {
 		vals, err := redigo.Values(epl, nil)
 		if err != nil {
 			return errors.As(err)
@@ -237,9 +237,47 @@ emptyLoop:
 			return errors.As(err)
 		}
 	}
-	if len(pending) >= limit {
-		goto emptyLoop
+	if len(mainPending) >= limit {
+		goto emptyMainLoop
 	}
+
+emptyDelayLoop:
+	delayPending, err := c.rs.XPending(c.delayStream, c.delayStream, limit)
+	if err != nil {
+		return err
+	}
+	for _, epl := range delayPending {
+		vals, err := redigo.Values(epl, nil)
+		if err != nil {
+			return errors.As(err)
+		}
+		if len(vals) != 4 {
+			return errors.New("expect 4 values in epl")
+		}
+		id, err := redigo.String(vals[0], nil)
+		if err != nil {
+			return errors.As(err)
+		}
+		//consumerName, err := redigo.String(vals[1], nil)
+		//if err != nil {
+		//	return err
+		//}
+		processDur, err := redigo.Int(vals[2], nil)
+		if err != nil {
+			return errors.As(err)
+		}
+		if processDur < int(overdue/(1000*1000)) {
+			// not reached the time
+			continue
+		}
+		if err := c.rs.XClaim(c.delayStream, c.delayStream, id, c.clientId, overdue); err != nil {
+			return errors.As(err)
+		}
+	}
+	if len(delayPending) >= limit {
+		goto emptyDelayLoop
+	}
+
 	return nil
 }
 
