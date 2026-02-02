@@ -203,16 +203,12 @@ func (s *RediStore) XReadGroup(streamName, groupName, consumerName string, limit
 		}
 		// nodata, goto block
 	} else {
-		hasData := false
-		for _, e := range entries {
-			if len(e.Messages) > 0 {
-				hasData = true
+		for _, msg := range entries {
+			if len(msg.Messages) > 0 {
+				return entries, nil
 			}
 		}
-		if hasData {
-			return entries, nil
-		}
-		// no message data, goto block
+		// nodata, goto block
 	}
 
 	// goto the block mode

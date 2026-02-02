@@ -53,10 +53,11 @@ func TestMsq(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ack delay
-	_, delayLen, err := consumer.Len()
+	mainLen, delayLen, err := consumer.Len()
 	if err != nil {
 		t.Fatal(err)
 	}
+	_ = mainLen
 	if delayLen != 1 {
 		t.Fatalf("expect 1, but:%d", delayLen)
 	}
@@ -68,7 +69,7 @@ func TestMsq(t *testing.T) {
 	if err := consumer.next(30, ackHandle); err != nil {
 		t.Fatal(err)
 	}
-	mainLen, delayLen, err := consumer.Len()
+	mainLen, delayLen, err = consumer.Len()
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -289,7 +289,6 @@ func (c redisMsqConsumer) next(limit int, handleFn MsqConsumerHandleFunc) error 
 			return errors.As(err)
 		}
 		// the server is still alive, keeping read
-		time.Sleep(time.Second)
 		return nil
 	}
 	for _, e := range entries {
@@ -331,6 +330,10 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 			return nil
 		default:
 			if err := c.next(limit, handleFn); err != nil {
+				if errors.Equal(redis.ErrNil, err) {
+					time.Sleep(time.Second)
+					continue
+				}
 				return errors.As(err)
 			}
 		}
