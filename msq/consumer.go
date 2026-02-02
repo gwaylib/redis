@@ -187,6 +187,8 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 			if !errors.Equal(err, redis.ErrNil) {
 				return errors.As(err)
 			}
+
+			// no data for more
 			return nil
 		}
 		for _, e := range entries {
@@ -195,9 +197,6 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 					return errors.As(err)
 				}
 			}
-		}
-		if len(entries) < limit {
-			return nil
 		}
 	}
 }
