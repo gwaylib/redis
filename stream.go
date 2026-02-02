@@ -215,6 +215,26 @@ func (s *RediStore) XReadGroup(streamName, groupName, consumerName string, limit
 	return StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "BLOCK", int64(timeout/1e6), "COUNT", limit, "STREAMS", streamName, ">"))
 }
 
+// for multi-consumer
+// the group name is set as the stream name
+// Need create first before using.
+func (s *RediStore) XReadGroupNonBlock(streamName, groupName, consumerName string, limit int, timeout time.Duration) ([]StreamEntry, error) {
+	conn := s.Pool.Get()
+	defer conn.Close()
+	entries, err := StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "COUNT", limit, "STREAMS", streamName, ">"))
+	if err != nil {
+		return nil, err
+	} else {
+		for _, msg := range entries {
+			if len(msg.Messages) > 0 {
+				return entries, nil
+			}
+		}
+		// nodata, goto block
+	}
+	return nil, ErrNil
+}
+
 func (s *RediStore) XACK(streamName, groupName, entryId string) (int, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()

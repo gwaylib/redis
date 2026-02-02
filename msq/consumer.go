@@ -172,7 +172,7 @@ func (c *redisMsqConsumer) Delay(entry *redis.MessageEntry) error {
 func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 	limit := 10
 	for {
-		entries, err := c.rs.XReadGroup(c.delayStream, c.delayStream, c.clientId, limit, timeout)
+		entries, err := c.rs.XReadGroupNonBlock(c.delayStream, c.delayStream, c.clientId, limit, timeout)
 		if err != nil {
 			if !errors.Equal(err, redis.ErrNil) {
 				return errors.As(err)
@@ -273,11 +273,19 @@ emptyDelayLoop:
 
 // recover the dead client messages to self.
 func (c *redisMsqConsumer) Claim(overdue time.Duration) error {
-	if err := c.claim(overdue); err != nil {
+	mainLen, delayLen, err := c.Len()
+	if err != nil {
 		return errors.As(err)
 	}
-	if err := c.delayBack(overdue); err != nil {
-		return errors.As(err)
+	if mainLen > 0 {
+		if err := c.claim(overdue); err != nil {
+			return errors.As(err)
+		}
+	}
+	if delayLen > 0 {
+		if err := c.delayBack(overdue); err != nil {
+			return errors.As(err)
+		}
 	}
 	return nil
 }

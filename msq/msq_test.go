@@ -17,14 +17,6 @@ func TestMsq(t *testing.T) {
 	}
 	defer r.Close()
 
-	p := NewMsqProducer(r, streamName)
-	if err := p.Put("ack", []byte("body")); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.Put("delay", []byte("body")); err != nil {
-		t.Fatal(err)
-	}
-
 	overdue := 5 * time.Second
 
 	consumer, err := newMsqConsumer(context.TODO(),
@@ -42,7 +34,28 @@ func TestMsq(t *testing.T) {
 		fmt.Println("requeue", id, *e) // 1762218531415-0 {key [98 111 100 121]}
 		return false                   // ack for delete
 	}
+	// keep clean
+	// handle by manully
+	if err := consumer.Claim(1e9); err != nil {
+		t.Fatal(err)
+	}
+	mainLen, delayLen, err := consumer.Len()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mainLen > 0 {
+		if err := consumer.next(int(mainLen), ackHandle); err != nil {
+			t.Fatal(err)
+		}
+	}
 
+	p := NewMsqProducer(r, streamName)
+	if err := p.Put("ack", []byte("body")); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Put("delay", []byte("body")); err != nil {
+		t.Fatal(err)
+	}
 	// consume
 	// ack
 	if err := consumer.next(1, ackHandle); err != nil {
@@ -53,7 +66,7 @@ func TestMsq(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ack delay
-	mainLen, delayLen, err := consumer.Len()
+	mainLen, delayLen, err = consumer.Len()
 	if err != nil {
 		t.Fatal(err)
 	}
