@@ -120,21 +120,11 @@ func (c *redisMsqConsumer) Len() (int64, int64, error) {
 }
 
 func (c *redisMsqConsumer) Read(limit int, timeout time.Duration) ([]redis.StreamEntry, error) {
-	for {
-		select {
-		case <-c.exit:
-		case <-c.ctx.Done():
-		default:
-			result, err := c.rs.XReadGroup(c.mainStream, c.mainStream, c.clientId, limit, timeout)
-			if err != nil {
-				if errors.Equal(err, redis.ErrNil) {
-					return nil, errors.As(err)
-				}
-				continue
-			}
-			return result, nil
-		}
+	result, err := c.rs.XReadGroup(c.mainStream, c.mainStream, c.clientId, limit, timeout)
+	if err != nil {
+		return nil, errors.As(err)
 	}
+	return result, nil
 }
 
 func (c *redisMsqConsumer) ack(stream, entryId string) error {
@@ -299,7 +289,6 @@ func (c redisMsqConsumer) next(limit int, handleFn MsqConsumerHandleFunc) error 
 			return errors.As(err)
 		}
 		// the server is still alive, keeping read
-		log.Println(errors.As(err))
 		time.Sleep(time.Second)
 		return nil
 	}
