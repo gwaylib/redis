@@ -221,7 +221,22 @@ func (s *RediStore) XReadGroup(streamName, groupName, consumerName string, limit
 func (s *RediStore) XReadGroupNonBlock(streamName, groupName, consumerName string, limit int, timeout time.Duration) ([]StreamEntry, error) {
 	conn := s.Pool.Get()
 	defer conn.Close()
-	entries, err := StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "COUNT", limit, "STREAMS", streamName, ">"))
+	entries, err := StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "COUNT", limit, "STREAMS", streamName, "0"))
+	if err != nil {
+		if err != redis.ErrNil {
+			return nil, err
+		}
+		// nodata, goto block
+	} else {
+		for _, msg := range entries {
+			if len(msg.Messages) > 0 {
+				return entries, nil
+			}
+		}
+		// nodata, goto block
+	}
+
+	entries, err = StreamEntries(conn.Do("XREADGROUP", "GROUP", groupName, consumerName, "COUNT", limit, "STREAMS", streamName, ">"))
 	if err != nil {
 		return nil, err
 	} else {

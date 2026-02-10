@@ -128,6 +128,7 @@ func (c *redisMsqConsumer) Read(limit int, timeout time.Duration) ([]redis.Strea
 }
 
 func (c *redisMsqConsumer) ack(stream, entryId string) error {
+	// 需要注意的是，XACK 只影响消费组的挂起列表，不会删除 Stream 中的数据本身。消息会继续在 Stream 容器中，直到你使用 XDEL 显式删除或使用 MAXLEN 超过限制被自动裁剪
 	if _, err := c.rs.XDel(stream, entryId); err != nil {
 		return errors.As(err)
 	}
@@ -170,7 +171,7 @@ func (c *redisMsqConsumer) Delay(entry *redis.MessageEntry) error {
 }
 
 func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
-	limit := 10
+	limit := 100
 	for {
 		entries, err := c.rs.XReadGroupNonBlock(c.delayStream, c.delayStream, c.clientId, limit, timeout)
 		if err != nil {
@@ -192,14 +193,13 @@ func (c *redisMsqConsumer) delayBack(timeout time.Duration) error {
 }
 
 // recover the dead client messages to self.
-func (c *redisMsqConsumer) claim(overdue time.Duration) error {
-	const limit = 10
-emptyMainLoop:
-	mainPending, err := c.rs.XPending(c.mainStream, c.mainStream, limit)
+func (c *redisMsqConsumer) claim(streamName, groupName string, overdue time.Duration) error {
+	const limit = 100
+	pending, err := c.rs.XPending(streamName, groupName, limit)
 	if err != nil {
 		return err
 	}
-	for _, epl := range mainPending {
+	for _, epl := range pending {
 		vals, err := redigo.Values(epl, nil)
 		if err != nil {
 			return errors.As(err)
@@ -211,10 +211,10 @@ emptyMainLoop:
 		if err != nil {
 			return errors.As(err)
 		}
-		//consumerName, err := redigo.String(vals[1], nil)
-		//if err != nil {
-		//	return err
-		//}
+		consumerName, err := redigo.String(vals[1], nil)
+		if err != nil {
+			return err
+		}
 		processDur, err := redigo.Int(vals[2], nil)
 		if err != nil {
 			return errors.As(err)
@@ -223,51 +223,12 @@ emptyMainLoop:
 			// not reached the time
 			continue
 		}
-		if err := c.rs.XClaim(c.mainStream, c.mainStream, id, c.clientId, overdue); err != nil {
-			return errors.As(err)
+		if consumerName != c.clientId {
+			if err := c.rs.XClaim(streamName, groupName, id, c.clientId, overdue); err != nil {
+				return errors.As(err)
+			}
 		}
 	}
-	if len(mainPending) >= limit {
-		goto emptyMainLoop
-	}
-
-emptyDelayLoop:
-	delayPending, err := c.rs.XPending(c.delayStream, c.delayStream, limit)
-	if err != nil {
-		return err
-	}
-	for _, epl := range delayPending {
-		vals, err := redigo.Values(epl, nil)
-		if err != nil {
-			return errors.As(err)
-		}
-		if len(vals) != 4 {
-			return errors.New("expect 4 values in epl")
-		}
-		id, err := redigo.String(vals[0], nil)
-		if err != nil {
-			return errors.As(err)
-		}
-		//consumerName, err := redigo.String(vals[1], nil)
-		//if err != nil {
-		//	return err
-		//}
-		processDur, err := redigo.Int(vals[2], nil)
-		if err != nil {
-			return errors.As(err)
-		}
-		if processDur < int(overdue/(1000*1000)) {
-			// not reached the time
-			continue
-		}
-		if err := c.rs.XClaim(c.delayStream, c.delayStream, id, c.clientId, overdue); err != nil {
-			return errors.As(err)
-		}
-	}
-	if len(delayPending) >= limit {
-		goto emptyDelayLoop
-	}
-
 	return nil
 }
 
@@ -278,11 +239,14 @@ func (c *redisMsqConsumer) Claim(overdue time.Duration) error {
 		return errors.As(err)
 	}
 	if mainLen > 0 {
-		if err := c.claim(overdue); err != nil {
+		if err := c.claim(c.mainStream, c.mainStream, overdue); err != nil {
 			return errors.As(err)
 		}
 	}
 	if delayLen > 0 {
+		if err := c.claim(c.delayStream, c.delayStream, overdue); err != nil {
+			return errors.As(err)
+		}
 		if err := c.delayBack(overdue); err != nil {
 			return errors.As(err)
 		}
@@ -339,9 +303,9 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 		default:
 			if err := c.next(limit, handleFn); err != nil {
 				if errors.Equal(redis.ErrNil, err) {
-					time.Sleep(time.Second)
 					continue
 				}
+				time.Sleep(time.Second)
 				return errors.As(err)
 			}
 		}

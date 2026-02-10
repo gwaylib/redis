@@ -94,3 +94,38 @@ func TestMsq(t *testing.T) {
 	}
 	consumer.Close()
 }
+
+func TestClaim(t *testing.T) {
+	streamName := "contest-stream-room-create"
+	r, err := redis.NewRediStore(10, "tcp", "127.0.0.1:6379", "xO3sU6jN1kN0bL2xT4pU0rM1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+
+	overdue := 5 * time.Second
+
+	consumer, err := newMsqConsumer(context.TODO(),
+		r, streamName, "arena-node-1", overdue,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mainLen, delayLen, err := consumer.Len()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("before claim", mainLen, delayLen)
+	// keep clean
+	// handle by manully
+	if err := consumer.Claim(1e9); err != nil {
+		t.Fatal(err)
+	}
+	mainLen, delayLen, err = consumer.Len()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println("after claim", mainLen, delayLen)
+
+	consumer.Close()
+}
