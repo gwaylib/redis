@@ -87,15 +87,13 @@ func NewMsqConsumer(ctx context.Context, rs *redis.RediStore, streamName, client
 		for {
 			select {
 			case <-consumer.exit:
-				log.Println("exit auto claim by user close")
 				return
 			case <-consumer.ctx.Done():
-				log.Println("exit auto claim by ctx done")
 				return
 			case <-delayTicker.C:
 				if err := consumer.Claim(delayDuration); err != nil {
 					if !errors.Equal(redis.ErrNil, err) {
-						log.Println(errors.As(err))
+						log.Println(errors.As(err, streamName))
 					}
 				}
 			}
@@ -300,7 +298,6 @@ func (c *redisMsqConsumer) Next(handleFn MsqConsumerHandleFunc) error {
 	for {
 		select {
 		case <-c.exit:
-			log.Println("exit next demon by user exit")
 			return nil
 		case <-c.ctx.Done():
 			return nil
